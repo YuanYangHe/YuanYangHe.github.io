@@ -16623,7 +16623,8 @@ function finishQuiz() {
       userLabel: wr.userLabel,
       correctLabel: wr.q.correctLabel,
       userText: wr.userLabel ? wr.q.runtimeOptions.find(o=>o.label === wr.userLabel)?.text : '未作答',
-      correctText: wr.q.runtimeOptions.find(o=>o.label === wr.q.correctLabel)?.text || '無資訊'
+      correctText: wr.q.runtimeOptions.find(o=>o.label === wr.q.correctLabel)?.text || '無資訊',
+      image: wr.q.image || wr.q.imageDataUrl
     }))
   };
   
@@ -16640,7 +16641,7 @@ function renderWrongList(container, wrongRecords) {
 
   wrongRecords.forEach(wr => {
     // Can be from current finishQuiz (wr.q exists) or from history (wr.q does not exist, use flat keys)
-    let promptStr, userAnsStr, correctAnsStr;
+    let promptStr, userAnsStr, correctAnsStr, imgUrl;
     
     if (wr.q) {
       promptStr = `(${wr.q.id}) ${wr.q.prompt}`;
@@ -16650,17 +16651,27 @@ function renderWrongList(container, wrongRecords) {
       
       userAnsStr = wr.userLabel ? `${wr.userLabel}. ${userOpt?.text}` : '未作答';
       correctAnsStr = `${wr.q.correctLabel}. ${corrOpt?.text}`;
+      imgUrl = wr.q.image || wr.q.imageDataUrl;
     } else {
       // Render from history object
       promptStr = `(${wr.id}) ${wr.prompt}`;
       userAnsStr = wr.userLabel ? `${wr.userLabel}. ${wr.userText}` : '未作答';
       correctAnsStr = `${wr.correctLabel}. ${wr.correctText}`;
+      const originalQ = pool.find(q => q.id === wr.id);
+      imgUrl = wr.image || (originalQ && (originalQ.image || originalQ.imageDataUrl));
     }
 
     const item = document.createElement('div');
     item.className = 'wrong-item';
+
+    let imgHtml = '';
+    if (imgUrl) {
+      imgHtml = `<div class="question-image" style="margin-bottom: 1rem;"><img src="${imgUrl}" alt="題目圖片" style="max-width: 100%; border-radius: var(--radius-md); border: 1px solid var(--border-color);"></div>`;
+    }
+
     item.innerHTML = `
       <div class="wrong-prompt">${promptStr}</div>
+      ${imgHtml}
       <div class="wrong-diff">
         <div class="your-ans">❌ 你的答案：${userAnsStr}</div>
         <div class="correct-ans">✅ 正確答案：${correctAnsStr}</div>
@@ -16766,7 +16777,8 @@ const getTopList = (stats) => {
         prompt: st.q.prompt,
         total: st.total,
         wrong: st.wrong,
-        rate: st.wrong / st.total
+        rate: st.wrong / st.total,
+        image: st.q.image || st.q.imageDataUrl
       }))
       .filter(item => item.wrong > 0);
       
@@ -16789,8 +16801,15 @@ const renderList = (container, listData) => {
     const el = document.createElement('div');
     el.className = 'wrong-item';
     const pct = Math.round(item.rate * 100);
+
+    let imgHtml = '';
+    if (item.image) {
+      imgHtml = `<div class="question-image" style="margin-bottom: 1rem;"><img src="${item.image}" alt="題目圖片" style="max-width: 100%; border-radius: var(--radius-md); border: 1px solid var(--border-color);"></div>`;
+    }
+
     el.innerHTML = `
       <div class="wrong-prompt">(${item.id}) ${item.prompt}</div>
+      ${imgHtml}
       <div class="wrong-diff">
         <span style="color:var(--danger); font-weight:bold;">答錯率: ${pct}%</span>
         <span style="color:var(--text-muted); margin-left: 10px;">總作答次數: ${item.total} / 答錯次數: ${item.wrong}</span>
