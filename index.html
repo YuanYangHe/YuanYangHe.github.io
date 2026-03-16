@@ -681,8 +681,11 @@ select {
       <!-- View: History -->
       <section id="view-history" class="view">
         <div class="card">
-          <h1>歷次作答紀錄</h1>
-          <p class="subtitle">您的測驗紀錄將保存在此瀏覽器中。</p>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+            <h1 style="margin-bottom: 0;">歷次作答紀錄</h1>
+            <button id="btn-clear-history" class="btn btn-danger btn-small">清除所有紀錄</button>
+          </div>
+          <p class="subtitle" style="margin-bottom: 1.5rem;">您的測驗紀錄將保存在此瀏覽器中。</p>
           
           <div id="history-list" class="history-list">
             <!-- History items injected here -->
@@ -16308,6 +16311,7 @@ const historyList = document.getElementById('history-list');
 const historyDetailPanel = document.getElementById('history-detail-panel');
 const historyDetailWrongList = document.getElementById('history-detail-wrong-list');
 const btnCloseHistoryDetail = document.getElementById('btn-close-history-detail');
+const btnClearHistory = document.getElementById('btn-clear-history');
 
 // Analysis Elements
 const analysisTotalRecords = document.getElementById('analysis-total-records');
@@ -16392,6 +16396,21 @@ function attachEvents() {
   // History detail close
   btnCloseHistoryDetail.addEventListener('click', () => {
     historyDetailPanel.classList.add('hidden');
+  });
+
+  // History clear
+  btnClearHistory.addEventListener('click', () => {
+    if (state.history.length === 0) {
+      alert('目前沒有任何紀錄可以清除。');
+      return;
+    }
+    if (confirm('確定要清除所有歷史紀錄嗎？動作無法復原！')) {
+      state.history = [];
+      localStorage.removeItem('quiz_history');
+      renderHistoryList();
+      historyDetailPanel.classList.add('hidden');
+      alert('歷史紀錄已清除！');
+    }
   });
 }
 
