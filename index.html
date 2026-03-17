@@ -599,7 +599,12 @@ select {
             </div>
           </div>
           
-          <button id="btn-start-quiz" class="btn btn-primary btn-large">開始測驗</button>
+          <button id="btn-start-quiz" class="btn btn-primary btn-large" style="width:100%">開始測驗 🚀</button>
+
+          <div id="drafts-container" class="hidden" style="margin-top:2rem; padding: 1rem; border:1px solid var(--border-color); background-color:var(--bg-card); border-radius:var(--radius-md);">
+             <h3 style="margin-top:0; margin-bottom:1rem; font-size:1.1rem; color:var(--text-color);">未完成的測驗 (最多3份)</h3>
+             <div id="drafts-list" style="display:flex; flex-direction:column; gap:0.5rem;"></div>
+          </div>
         </div>
       </section>
 
@@ -710,6 +715,14 @@ select {
             <div class="stat-box">
               <span class="stat-label">總作答紀錄數</span>
               <span id="analysis-total-records" class="stat-value">0</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-label">所有考試答對率</span>
+              <span id="analysis-all-correct-rate" class="stat-value">-</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-label">近10次答對率</span>
+              <span id="analysis-recent-correct-rate" class="stat-value">-</span>
             </div>
           </div>
           <h2>近期 10 次作答的高錯誤率題目 (Top 15)</h2>
@@ -16259,7 +16272,9 @@ const state = {
   sessionQuestions: [],
   answers: {},
   currentIndex: 0,
-  history: []
+  history: [],
+  draftId: null, // Track currently playing draft
+  immediateFeedback: false // Track if feedback is enabled for this session
 };
 
 // --- DOM Elements ---
@@ -16315,24 +16330,23 @@ const btnClearHistory = document.getElementById('btn-clear-history');
 
 // Analysis Elements
 const analysisTotalRecords = document.getElementById('analysis-total-records');
+const analysisAllRate = document.getElementById('analysis-all-correct-rate');
+const analysisRecentRate = document.getElementById('analysis-recent-correct-rate');
 const analysisRecentList = document.getElementById('analysis-recent-list');
 const analysisAllList = document.getElementById('analysis-all-list');
 
 // --- Initialization ---
 async function init() {
   try {
-    const res = await fetch('questions.json');
-    const data = await res.json();
-    pool = data.questions || [];
-  } catch (e) {
-    console.error('Failed to load questions.json, falling back to window.QUIZ_QUESTIONS', e);
-    // Fallback for file:// protocol
     if (window.QUIZ_QUESTIONS) {
       pool = window.QUIZ_QUESTIONS.questions || window.QUIZ_QUESTIONS;
     }
+  } catch (e) {
+    console.error('Failed to load questions:', e);
   }
   totalPoolCountEl.textContent = pool.length;
   loadHistory();
+  renderDrafts(); // 加入渲染草稿功能
   switchView('home');
   attachEvents();
 }
@@ -16367,6 +16381,7 @@ function attachEvents() {
   btnPrev.addEventListener('click', () => {
     if (state.currentIndex > 0) {
       state.currentIndex--;
+      saveCurrentStateToDraft();
       renderQuestion();
     }
   });
@@ -16374,6 +16389,7 @@ function attachEvents() {
   btnNext.addEventListener('click', () => {
     if (state.currentIndex < state.sessionQuestions.length - 1) {
       state.currentIndex++;
+      saveCurrentStateToDraft();
       renderQuestion();
     }
   });
@@ -16430,6 +16446,8 @@ function switchView(viewName) {
     historyDetailPanel.classList.add('hidden');
   } else if (viewName === 'analysis') {
     renderAnalysis();
+  } else if (viewName === 'home') {
+    renderDrafts();
   }
 }
 
@@ -16503,6 +16521,9 @@ function startQuiz() {
 
   state.answers = {};
   state.currentIndex = 0;
+  state.draftId = Date.now();
+  state.immediateFeedback = immediateFeedbackEl.checked;
+  saveCurrentStateToDraft();
   
   switchView('quiz');
   renderQuestion();
@@ -16579,6 +16600,7 @@ function renderQuestion() {
       if (immediateFeedbackEl.checked && state.answers[q.id]) return; // locked
       
       state.answers[q.id] = opt.label;
+      saveCurrentStateToDraft(); // Save draft
       if (immediateFeedbackEl.checked) {
         // re-render question to show colors
         renderQuestion();
@@ -16648,6 +16670,7 @@ function finishQuiz() {
   };
   
   saveHistory(record);
+  removeCurrentDraft();
   switchView('summary');
 }
 
@@ -16719,6 +16742,108 @@ function saveHistory(record) {
   localStorage.setItem('quiz_history', JSON.stringify(state.history));
 }
 
+// --- Drafts Storage & View ---
+function getDrafts() {
+  try {
+    const data = localStorage.getItem('quiz_drafts');
+    return data ? JSON.parse(data) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveDrafts(drafts) {
+  localStorage.setItem('quiz_drafts', JSON.stringify(drafts));
+}
+
+function saveCurrentStateToDraft() {
+  if (state.currentView !== 'quiz' || state.sessionQuestions.length === 0) return;
+  
+  if (!state.draftId) {
+    state.draftId = Date.now();
+  }
+  
+  const drafts = getDrafts();
+  const draftIdx = drafts.findIndex(d => d.id === state.draftId);
+  const draftData = {
+    id: state.draftId,
+    date: new Date().toLocaleString('zh-TW'),
+    sessionQuestions: state.sessionQuestions,
+    answers: state.answers,
+    currentIndex: state.currentIndex,
+    total: state.sessionQuestions.length,
+    immediateFeedback: state.immediateFeedback
+  };
+
+  if (draftIdx >= 0) {
+    drafts[draftIdx] = draftData;
+  } else {
+    drafts.unshift(draftData);
+    if (drafts.length > 3) drafts.length = 3;
+  }
+  
+  saveDrafts(drafts);
+}
+
+function removeCurrentDraft() {
+  if (!state.draftId) return;
+  const drafts = getDrafts();
+  const newDrafts = drafts.filter(d => d.id !== state.draftId);
+  saveDrafts(newDrafts);
+  state.draftId = null;
+}
+
+function renderDrafts() {
+  const container = document.getElementById('drafts-container');
+  const list = document.getElementById('drafts-list');
+  const drafts = getDrafts();
+  
+  if (drafts.length === 0) {
+    container.classList.add('hidden');
+    return;
+  }
+  
+  container.classList.remove('hidden');
+  list.innerHTML = '';
+  
+  drafts.forEach(d => {
+    const answeredCount = Object.keys(d.answers).length;
+    const item = document.createElement('div');
+    item.style.cssText = 'display:flex; justify-content:space-between; align-items:center; padding:0.5rem; background:var(--bg-color); border-radius:var(--radius-md); border:1px solid var(--border-color);';
+    item.innerHTML = `
+      <div style="font-size:0.9rem;">
+        <div style="color:var(--text-muted);font-size:0.8rem">${d.date}</div>
+        <div>已作答: ${answeredCount}/${d.total}</div>
+      </div>
+      <button class="btn btn-outline btn-small" data-id="${d.id}">繼續測驗</button>
+    `;
+    list.appendChild(item);
+  });
+
+  list.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const id = parseInt(e.target.getAttribute('data-id'), 10);
+      loadDraft(id);
+    });
+  });
+}
+
+function loadDraft(id) {
+  const drafts = getDrafts();
+  const draft = drafts.find(d => d.id === id);
+  if (!draft) return;
+  
+  state.draftId = draft.id;
+  state.sessionQuestions = draft.sessionQuestions;
+  state.answers = draft.answers || {};
+  state.currentIndex = draft.currentIndex || 0;
+  state.immediateFeedback = !!draft.immediateFeedback;
+  immediateFeedbackEl.checked = state.immediateFeedback;
+  
+  switchView('quiz');
+  renderQuestion();
+}
+
 function renderHistoryList() {
   historyList.innerHTML = '';
   if (state.history.length === 0) {
@@ -16781,8 +16906,24 @@ function calculateQuestionStats(historyList, fullPool) {
 function renderAnalysis() {
   analysisTotalRecords.textContent = state.history.length;
   
+  // Calculate correct rates
+  const calculateRate = (records) => {
+    if (records.length === 0) return '-';
+    let totalQs = 0;
+    let correctQs = 0;
+    records.forEach(r => {
+      totalQs += r.total || 0;
+      correctQs += r.correct || 0;
+    });
+    return totalQs > 0 ? Math.round((correctQs / totalQs) * 100) + '%' : '-';
+  };
+
+  const recentHistory = state.history.slice(0, 10); // history is prepended (latest first)
+  
+  analysisAllRate.textContent = calculateRate(state.history);
+  analysisRecentRate.textContent = calculateRate(recentHistory);
+  
   const allStats = calculateQuestionStats(state.history, pool);
-  const recentHistory = state.history.slice(-10);
   const recentStats = calculateQuestionStats(recentHistory, pool);
 
 const getTopList = (stats) => {
