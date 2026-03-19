@@ -16788,10 +16788,15 @@ function saveCurrentStateToDraft() {
 
 function removeCurrentDraft() {
   if (!state.draftId) return;
+  deleteDraft(state.draftId);
+}
+
+function deleteDraft(id) {
   const drafts = getDrafts();
-  const newDrafts = drafts.filter(d => d.id !== state.draftId);
+  const newDrafts = drafts.filter(d => d.id !== id);
   saveDrafts(newDrafts);
-  state.draftId = null;
+  if (state.draftId === id) state.draftId = null;
+  renderDrafts();
 }
 
 function renderDrafts() {
@@ -16816,15 +16821,27 @@ function renderDrafts() {
         <div style="color:var(--text-muted);font-size:0.8rem">${d.date}</div>
         <div>已作答: ${answeredCount}/${d.total}</div>
       </div>
-      <button class="btn btn-outline btn-small" data-id="${d.id}">繼續測驗</button>
+      <div>
+        <button class="btn btn-outline btn-small btn-continue" data-id="${d.id}">繼續測驗</button>
+        <button class="btn btn-outline btn-small btn-delete" data-id="${d.id}" style="color:var(--danger); border-color:var(--danger); margin-left:0.25rem;">清除</button>
+      </div>
     `;
     list.appendChild(item);
   });
 
-  list.querySelectorAll('button').forEach(btn => {
+  list.querySelectorAll('.btn-continue').forEach(btn => {
     btn.addEventListener('click', (e) => {
       const id = parseInt(e.target.getAttribute('data-id'), 10);
       loadDraft(id);
+    });
+  });
+
+  list.querySelectorAll('.btn-delete').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const id = parseInt(e.target.getAttribute('data-id'), 10);
+      if (confirm('確定要清除這份未完成的測驗嗎？此動作無法復原。')) {
+        deleteDraft(id);
+      }
     });
   });
 }
